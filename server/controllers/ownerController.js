@@ -5,6 +5,14 @@ import SupportTicket from "../models/SupportTicket.js";
 import User from "../models/User.js";
 import fs from "fs";
 import bcrypt from "bcrypt";
+import {
+  isAlphabeticCity,
+  isAlphabeticName,
+  isAlphanumericPassword,
+  isGmailAddress,
+  isSafeText,
+  isVehicleText,
+} from "../utils/validators.js";
 
 const TRACKING_ROUTE_POINTS = {
   lahore: [
@@ -308,6 +316,21 @@ export const addCar = async (req, res) => {
       return res.json({ success: false, message: "Car image is required" });
     }
 
+    if (!isVehicleText(car.brand) || !isVehicleText(car.model)) {
+      return res.json({
+        success: false,
+        message:
+          "Brand and model can contain letters, numbers, spaces, dot and hyphen only.",
+      });
+    }
+
+    if (!isAlphabeticCity(car.location)) {
+      return res.json({
+        success: false,
+        message: "City must contain alphabetic characters only.",
+      });
+    }
+
     if (
       !Number.isFinite(numericLatitude) ||
       numericLatitude < -90 ||
@@ -542,9 +565,26 @@ export const updateProfile = async (req, res) => {
         .json({ success: false, message: "User not found" });
     }
 
+    const normalizedName = name ? String(name).trim() : "";
+    const normalizedEmail = email ? String(email).trim().toLowerCase() : "";
+
+    if (normalizedName && !isAlphabeticName(normalizedName)) {
+      return res.json({
+        success: false,
+        message: "Invalid name.",
+      });
+    }
+
+    if (normalizedEmail && !isGmailAddress(normalizedEmail)) {
+      return res.json({
+        success: false,
+        message: "Email must be a valid @gmail.com address.",
+      });
+    }
+
     // Check if email is taken by another user
-    if (email && email !== user.email) {
-      const existing = await User.findOne({ email });
+    if (normalizedEmail && normalizedEmail !== user.email) {
+      const existing = await User.findOne({ email: normalizedEmail });
       if (existing) {
         return res.json({
           success: false,
@@ -555,6 +595,14 @@ export const updateProfile = async (req, res) => {
 
     // If changing password, verify current password first
     if (newPassword) {
+      if (!isAlphanumericPassword(newPassword)) {
+        return res.json({
+          success: false,
+          message:
+            "New password must be at least 6 characters and contain letters or numbers only.",
+        });
+      }
+
       if (!currentPassword) {
         return res.json({
           success: false,
@@ -571,8 +619,8 @@ export const updateProfile = async (req, res) => {
       user.password = await bcrypt.hash(newPassword, 10);
     }
 
-    if (name) user.name = name;
-    if (email) user.email = email;
+    if (normalizedName) user.name = normalizedName;
+    if (normalizedEmail) user.email = normalizedEmail;
 
     await user.save();
 
@@ -921,10 +969,13 @@ export const replyToSupportTicket = async (req, res) => {
       .trim()
       .slice(0, 1000);
 
-    if (!message) {
+    if (!message || !isSafeText(message, 2, 1000)) {
       return res
         .status(400)
-        .json({ success: false, message: "Reply message is required." });
+        .json({
+          success: false,
+          message: "Reply message must be between 2 and 1000 characters.",
+        });
     }
 
     const ticket = await SupportTicket.findById(ticketId)

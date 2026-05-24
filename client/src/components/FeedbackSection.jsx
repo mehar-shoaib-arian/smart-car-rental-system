@@ -2,6 +2,13 @@ import React, { useCallback, useEffect, useState } from "react";
 import Tittle from "./Tittle";
 import { assets } from "../assets/assets";
 import { useAppContext } from "../context/contextStore";
+import { toast } from "react-hot-toast";
+import {
+  hasAlphabeticCharacter,
+  isAlphabeticCity,
+  isAlphabeticName,
+  validationMessages,
+} from "../utils/validators";
 
 const getInitial = (name = "") => name.trim().charAt(0).toUpperCase() || "U";
 
@@ -33,6 +40,22 @@ const FeedbackSection = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!isAlphabeticName(formData.name)) {
+      toast.error(validationMessages.name);
+      return;
+    }
+
+    if (!isAlphabeticCity(formData.location)) {
+      toast.error(validationMessages.city);
+      return;
+    }
+
+    if (!hasAlphabeticCharacter(formData.comment)) {
+      toast.error("Feedback must contain alphabetic characters.");
+      return;
+    }
+
     try {
       await axios.post("/api/feedback", formData);
 
@@ -47,6 +70,7 @@ const FeedbackSection = () => {
       }, 3000);
     } catch (error) {
       console.error("Error submitting feedback", error);
+      toast.error(error.response?.data?.message || "Error submitting feedback");
     }
   };
 

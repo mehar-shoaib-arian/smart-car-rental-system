@@ -5,6 +5,7 @@ import { toast } from "react-hot-toast";
 import { generateBookingPDF } from "../utils/generateBookingPDF";
 import { useAppContext } from "../context/contextStore";
 import { getCarImageSrc } from "../utils/imageFallback";
+import { hasAlphabeticCharacter } from "../utils/validators";
 
 const handleBookingCarImageError = (event) => {
   if (!event?.currentTarget) return;
@@ -22,6 +23,8 @@ const MyBookings = () => {
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState(null);
   const [activeFilter, setActiveFilter] = useState("all");
+  const [reviewingId, setReviewingId] = useState(null);
+  const [reviewDrafts, setReviewDrafts] = useState({});
   const currency = import.meta.env.VITE_CURRENCY;
 
   const fetchMyBookings = useCallback(async () => {
@@ -85,6 +88,66 @@ const MyBookings = () => {
       console.error("Cancel error:", error);
     } finally {
       setCancellingId(null);
+    }
+  };
+
+  const updateReviewDraft = (bookingId, field, value) => {
+    setReviewDrafts((prev) => ({
+      ...prev,
+      [bookingId]: {
+        rating: "5",
+        comment: "",
+        ...(prev[bookingId] || {}),
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleSubmitReview = async (bookingId) => {
+    const draft = reviewDrafts[bookingId] || { rating: "5", comment: "" };
+    const rating = Number(draft.rating);
+    const comment = String(draft.comment || "").trim();
+
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      toast.error("Rating must be between 1 and 5.");
+      return;
+    }
+
+    if (comment.length < 5 || comment.length > 500) {
+      toast.error("Review must be between 5 and 500 characters.");
+      return;
+    }
+
+    if (!hasAlphabeticCharacter(comment)) {
+      toast.error("Review must contain alphabetic characters.");
+      return;
+    }
+
+    setReviewingId(bookingId);
+    try {
+      const { data } = await axios.post(
+        "/api/feedback/car",
+        { bookingId, rating, comment },
+        {
+          headers: {
+            Authorization: `Bearer ${sessionStorage.getItem("token")}`,
+          },
+        },
+      );
+
+      if (data.success) {
+        toast.success(data.message || "Review submitted.");
+        setReviewDrafts((prev) => ({
+          ...prev,
+          [bookingId]: { rating: "5", comment: "" },
+        }));
+      } else {
+        toast.error(data.message || "Failed to submit review.");
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to submit review.");
+    } finally {
+      setReviewingId(null);
     }
   };
 
@@ -305,6 +368,55 @@ const MyBookings = () => {
                   </svg>
                   Download Receipt
                 </button>
+
+                {booking.status === "confirmed" && (
+                  <div className="mt-3 w-full rounded-lg border border-blue-100 bg-blue-50 p-3">
+                    <p className="text-xs font-semibold text-blue-700">
+                      Rate this car
+                    </p>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                      <select
+                        value={reviewDrafts[booking._id]?.rating || "5"}
+                        onChange={(e) =>
+                          updateReviewDraft(
+                            booking._id,
+                            "rating",
+                            e.target.value,
+                          )
+                        }
+                        className="rounded-md border border-blue-200 bg-white px-3 py-2 text-xs outline-none"
+                      >
+                        <option value="5">5 Stars</option>
+                        <option value="4">4 Stars</option>
+                        <option value="3">3 Stars</option>
+                        <option value="2">2 Stars</option>
+                        <option value="1">1 Star</option>
+                      </select>
+                      <input
+                        value={reviewDrafts[booking._id]?.comment || ""}
+                        onChange={(e) =>
+                          updateReviewDraft(
+                            booking._id,
+                            "comment",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="Write car review..."
+                        className="min-w-0 flex-1 rounded-md border border-blue-200 bg-white px-3 py-2 text-xs outline-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={reviewingId === booking._id}
+                        onClick={() => handleSubmitReview(booking._id)}
+                        className="rounded-md bg-blue-600 px-4 py-2 text-xs font-medium text-white cursor-pointer disabled:bg-blue-300 disabled:cursor-not-allowed"
+                      >
+                        {reviewingId === booking._id
+                          ? "Submitting..."
+                          : "Submit Review"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

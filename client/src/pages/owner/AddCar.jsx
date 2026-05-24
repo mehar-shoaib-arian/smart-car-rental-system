@@ -3,6 +3,11 @@ import Title from "../../components/owner/Title";
 import { assets } from "../../assets/assets";
 import { useAppContext } from "../../context/contextStore";
 import toast from "react-hot-toast";
+import {
+  isAlphabeticCity,
+  isVehicleText,
+  validationMessages,
+} from "../../utils/validators";
 
 const AddCar = () => {
   const { axios, currency } = useAppContext();
@@ -41,6 +46,21 @@ const AddCar = () => {
   const onSubmitHandler = async (e) => {
     e.preventDefault();
     if (isLoading) return;
+
+    if (!image) {
+      toast.error("Car image is required.");
+      return;
+    }
+
+    if (!isVehicleText(car.brand) || !isVehicleText(car.model)) {
+      toast.error(validationMessages.vehicleText);
+      return;
+    }
+
+    if (!isAlphabeticCity(car.location)) {
+      toast.error(validationMessages.city);
+      return;
+    }
 
     setIsLoading(true);
     try {

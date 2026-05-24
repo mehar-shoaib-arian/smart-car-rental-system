@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 import Tittle from "../components/Tittle";
 import { assets } from "../assets/assets";
 import CarCard from "../components/CarCard";
@@ -118,46 +118,42 @@ const Cars = () => {
     (maxPrice > 0 && (priceRange[0] > 0 || priceRange[1] < maxPrice)) ||
     input.trim().length > 0;
 
-  const filteredCars = useMemo(() => {
+  const matchesCurrentFilters = useCallback((car) => {
     const query = input.trim().toLowerCase();
 
-    return cars.filter((car) => {
-      const brand = (car.brand || "").toLowerCase();
-      const model = (car.model || "").toLowerCase();
-      const location = (car.location || "").toLowerCase();
-      const matchesText =
-        !query || brand.includes(query) || model.includes(query);
+    const brand = (car.brand || "").toLowerCase();
+    const model = (car.model || "").toLowerCase();
+    const location = (car.location || "").toLowerCase();
+    const matchesText = !query || brand.includes(query) || model.includes(query);
 
-      const matchesLocation =
-        !selectedLocation || location === selectedLocation.trim().toLowerCase();
+    const matchesLocation =
+      !selectedLocation || location === selectedLocation.trim().toLowerCase();
 
-      const matchesCategory =
-        selectedCategories.length === 0 ||
-        selectedCategories.includes(car.category);
+    const matchesCategory =
+      selectedCategories.length === 0 ||
+      selectedCategories.includes(car.category);
 
-      const matchesFuel =
-        selectedFuels.length === 0 || selectedFuels.includes(car.fuel_type);
+    const matchesFuel =
+      selectedFuels.length === 0 || selectedFuels.includes(car.fuel_type);
 
-      const matchesTransmission =
-        selectedTransmissions.length === 0 ||
-        selectedTransmissions.includes(car.transmission);
+    const matchesTransmission =
+      selectedTransmissions.length === 0 ||
+      selectedTransmissions.includes(car.transmission);
 
-      // Only apply price filter once maxPrice has been computed from real data
-      const matchesPrice =
-        maxPrice === 0 ||
-        (car.pricePerDay >= priceRange[0] && car.pricePerDay <= priceRange[1]);
+    // Only apply price filter once maxPrice has been computed from real data
+    const matchesPrice =
+      maxPrice === 0 ||
+      (car.pricePerDay >= priceRange[0] && car.pricePerDay <= priceRange[1]);
 
-      return (
-        matchesText &&
-        matchesLocation &&
-        matchesCategory &&
-        matchesFuel &&
-        matchesTransmission &&
-        matchesPrice
-      );
-    });
+    return (
+      matchesText &&
+      matchesLocation &&
+      matchesCategory &&
+      matchesFuel &&
+      matchesTransmission &&
+      matchesPrice
+    );
   }, [
-    cars,
     input,
     selectedLocation,
     selectedCategories,
@@ -166,6 +162,40 @@ const Cars = () => {
     maxPrice,
     priceRange,
   ]);
+
+  const filteredCars = useMemo(() => {
+    return cars.filter(matchesCurrentFilters);
+  }, [
+    cars,
+    matchesCurrentFilters,
+  ]);
+
+  const visibleRecommendedCars = useMemo(() => {
+    if (hasActiveFilters || selectedLocation.trim()) return [];
+
+    const filteredIds = new Set(filteredCars.map((car) => car._id));
+    const seenIds = new Set();
+
+    return recommendedCars.filter((car) => {
+      if (!car?._id || seenIds.has(car._id)) return false;
+      seenIds.add(car._id);
+      return filteredIds.has(car._id) && matchesCurrentFilters(car);
+    });
+  }, [
+    recommendedCars,
+    filteredCars,
+    hasActiveFilters,
+    matchesCurrentFilters,
+    selectedLocation,
+  ]);
+
+  const regularFilteredCars = useMemo(() => {
+    const recommendedIds = new Set(
+      visibleRecommendedCars.map((car) => car._id),
+    );
+
+    return filteredCars.filter((car) => !recommendedIds.has(car._id));
+  }, [filteredCars, visibleRecommendedCars]);
 
   return (
     <div className="flex flex-col items-center py-20 bg-light max-md:px-4">
@@ -456,7 +486,7 @@ const Cars = () => {
               </div>
             ) : (
               <>
-                {recommendedCars.length > 0 && (
+                {visibleRecommendedCars.length > 0 && (
                   <div className="mb-10 xl:px-20 max-w-7xl mx-auto">
                     <div className="mb-4">
                       <h3 className="text-xl font-semibold text-gray-800">
@@ -467,9 +497,9 @@ const Cars = () => {
                       </p>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                      {recommendedCars.map((car) => (
+                      {visibleRecommendedCars.map((car) => (
                         <div key={`recommended-${car._id}`} className="relative">
-                          <span className="absolute left-4 top-4 z-10 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-semibold text-white shadow">
+                          <span className="absolute left-6 top-11 z-20 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-semibold text-white shadow">
                             Smart Pick
                           </span>
                           <CarCard car={car} />
@@ -478,13 +508,15 @@ const Cars = () => {
                     </div>
                   </div>
                 )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 mt-4 xl:px-20 max-w-7xl mx-auto">
-                  {filteredCars.map((car) => (
-                    <div key={car._id}>
-                      <CarCard car={car} />
-                    </div>
-                  ))}
-                </div>
+                {regularFilteredCars.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 mt-4 xl:px-20 max-w-7xl mx-auto">
+                    {regularFilteredCars.map((car) => (
+                      <div key={car._id}>
+                        <CarCard car={car} />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </>

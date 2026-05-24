@@ -80,7 +80,10 @@ const Chatbot = () => {
     return threads.find((thread) => thread.id === activeThreadId) || threads[0];
   }, [threads, activeThreadId]);
 
-  const messages = activeThread?.messages || [];
+  const messages = useMemo(
+    () => activeThread?.messages || [],
+    [activeThread?.messages],
+  );
 
   useEffect(() => {
     if (typeof window !== "undefined") {

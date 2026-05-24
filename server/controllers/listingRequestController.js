@@ -4,6 +4,12 @@ import User from "../models/User.js";
 import imagekit from "../configs/imageKit.js";
 import fs from "fs";
 import { sendListingRequestStatusEmail } from "../configs/emailService.js";
+import {
+  isAlphabeticCity,
+  isAlphabeticName,
+  isGmailAddress,
+  isVehicleText,
+} from "../utils/validators.js";
 
 export const createListingRequest = async (req, res) => {
   try {
@@ -56,11 +62,38 @@ export const createListingRequest = async (req, res) => {
       });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(String(email).trim().toLowerCase())) {
+    const normalizedFullName = String(fullName).trim();
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedLocation = String(location).trim();
+    const normalizedBrand = String(brand).trim();
+    const normalizedModel = String(model).trim();
+
+    if (!isAlphabeticName(normalizedFullName)) {
       return res.status(400).json({
         success: false,
-        message: "Please enter a valid email address.",
+        message: "Invalid name.",
+      });
+    }
+
+    if (!isGmailAddress(normalizedEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: "Email must be a valid @gmail.com address.",
+      });
+    }
+
+    if (!isAlphabeticCity(normalizedLocation)) {
+      return res.status(400).json({
+        success: false,
+        message: "City must contain alphabetic characters only.",
+      });
+    }
+
+    if (!isVehicleText(normalizedBrand) || !isVehicleText(normalizedModel)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Brand and model can contain letters, numbers, spaces, dot and hyphen only.",
       });
     }
 
@@ -122,18 +155,18 @@ export const createListingRequest = async (req, res) => {
 
     await ListingRequest.create({
       submittedBy,
-      fullName,
-      email,
+      fullName: normalizedFullName,
+      email: normalizedEmail,
       phone,
-      brand,
-      model,
+      brand: normalizedBrand,
+      model: normalizedModel,
       year: Number(year),
       category,
       transmission,
       fuel_type,
       seating_capacity: Number(seating_capacity),
       pricePerDay: Number(pricePerDay),
-      location,
+      location: normalizedLocation,
       latitude: numericLatitude,
       longitude: numericLongitude,
       description,

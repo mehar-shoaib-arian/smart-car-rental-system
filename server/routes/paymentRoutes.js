@@ -20,6 +20,7 @@ import {
   releaseCarBookingLock,
 } from "../utils/bookingLock.js";
 import { calculateSmartBookingPrice } from "../utils/bookingPricing.js";
+import { isValidBookingDateRange } from "../utils/validators.js";
 
 const router = express.Router();
 
@@ -153,8 +154,8 @@ const ensureBookingRequestIsValid = ({ carId, pickupDate, returnDate }) => {
     throw error;
   }
 
-  if (toDate(returnDate) <= toDate(pickupDate)) {
-    const error = new Error("Return date must be after pickup date.");
+  if (!isValidBookingDateRange(pickupDate, returnDate)) {
+    const error = new Error("Return date must be after a valid pickup date.");
     error.statusCode = 400;
     throw error;
   }

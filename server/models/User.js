@@ -9,6 +9,8 @@ const userSchema = new mongoose.Schema(
     image: { type: String, default: "" },
     passwordResetOtp: { type: String, default: "" },
     passwordResetOtpExpires: { type: Date, default: null },
+    failedLoginAttempts: { type: Number, default: 0 },
+    accountLockedUntil: { type: Date, default: null },
   },
   { timestamps: true },
 );

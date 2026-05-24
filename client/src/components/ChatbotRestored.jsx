@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppContext } from "../context/contextStore";
+import { isSafeText } from "../utils/validators";
 
 const STORAGE_KEY = "smart_car_chatbot_threads";
 
@@ -151,7 +152,7 @@ const ChatbotRestored = () => {
     };
   }, [open]);
 
-  const fetchSupportTickets = async (selectLatest = false) => {
+  const fetchSupportTickets = useCallback(async (selectLatest = false) => {
     if (!token || user?.role !== "user") return;
 
     setSupportLoading(true);
@@ -178,7 +179,7 @@ const ChatbotRestored = () => {
     } finally {
       setSupportLoading(false);
     }
-  };
+  }, [axios, token, user?.role]);
 
   useEffect(() => {
     if (!open || !supportMode || !token || user?.role !== "user") return;
@@ -189,7 +190,7 @@ const ChatbotRestored = () => {
     }, 15000);
 
     return () => window.clearInterval(intervalId);
-  }, [open, supportMode, token, user?.role]);
+  }, [fetchSupportTickets, open, supportMode, token, user?.role]);
 
   const updateThreadMessages = (threadId, updater) => {
     setThreads((prev) =>
@@ -317,7 +318,7 @@ const ChatbotRestored = () => {
     setSupportMode(false);
   };
 
-  const handleOpenSupportMode = async () => {
+  const handleOpenSupportMode = useCallback(async () => {
     if (!token || user?.role !== "user") {
       setPreferredLoginRole("user");
       setShowLogin(true);
@@ -328,7 +329,13 @@ const ChatbotRestored = () => {
     setIssueFormOpen(false);
     setHistoryOpen(false);
     await fetchSupportTickets();
-  };
+  }, [
+    fetchSupportTickets,
+    setPreferredLoginRole,
+    setShowLogin,
+    token,
+    user?.role,
+  ]);
 
   useEffect(() => {
     const handleExternalSupportOpen = async () => {
@@ -353,7 +360,13 @@ const ChatbotRestored = () => {
         handleExternalSupportOpen,
       );
     };
-  }, [token, user?.role, setPreferredLoginRole, setShowLogin]);
+  }, [
+    handleOpenSupportMode,
+    setPreferredLoginRole,
+    setShowLogin,
+    token,
+    user?.role,
+  ]);
 
   const handleSubmitIssue = async () => {
     if (!activeThread || loading) return;
@@ -362,6 +375,19 @@ const ChatbotRestored = () => {
     const message = issueMessage.trim();
 
     if (!subject || !message) return;
+
+    if (!isSafeText(subject, 3, 120) || !isSafeText(message, 5, 1000)) {
+      updateThreadMessages(activeThread.id, (prevMessages) => [
+        ...prevMessages,
+        {
+          id: createId("msg"),
+          sender: "bot",
+          text: "Subject must be 3-120 characters and details must be 5-1000 characters.",
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      return;
+    }
 
     const summaryMessage = {
       id: createId("msg"),
@@ -433,6 +459,19 @@ const ChatbotRestored = () => {
   const handleSendSupportReply = async () => {
     const message = supportReply.trim();
     if (!message || !activeSupportTicket) return;
+
+    if (!isSafeText(message, 2, 1000)) {
+      updateThreadMessages(activeThread.id, (prevMessages) => [
+        ...prevMessages,
+        {
+          id: createId("msg"),
+          sender: "bot",
+          text: "Support reply must be between 2 and 1000 characters.",
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      return;
+    }
 
     setSupportLoading(true);
     try {

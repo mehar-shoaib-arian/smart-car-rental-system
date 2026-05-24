@@ -11,6 +11,18 @@ const createTransporter = () => {
   });
 };
 
+const hasUsableEmailConfig = () => {
+  const user = String(process.env.EMAIL_USER || "").trim();
+  const pass = String(process.env.EMAIL_PASS || "").trim();
+
+  return (
+    user &&
+    pass &&
+    user !== "your_gmail@gmail.com" &&
+    pass !== "your_gmail_app_password"
+  );
+};
+
 // ─── Base HTML wrapper ───────────────────────────────────────────────────────
 const baseTemplate = (content) => `
 <!DOCTYPE html>
@@ -77,12 +89,17 @@ const baseTemplate = (content) => `
 // ─── Send helper ─────────────────────────────────────────────────────────────
 const sendEmail = async ({ to, subject, html }) => {
   try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    if (!hasUsableEmailConfig()) {
       console.log(
-        "[EmailService] EMAIL_USER or EMAIL_PASS not set — skipping email.",
+        "[EmailService] EMAIL_USER or EMAIL_PASS is not configured correctly - skipping email.",
       );
-      return;
+      return {
+        success: false,
+        message:
+          "Email service is not configured. Set EMAIL_USER and EMAIL_PASS in server/.env.",
+      };
     }
+
     const transporter = createTransporter();
     await transporter.sendMail({
       from: `"SmartRent" <${process.env.EMAIL_USER}>`,
@@ -90,10 +107,12 @@ const sendEmail = async ({ to, subject, html }) => {
       subject,
       html,
     });
-    console.log(`[EmailService] Email sent to ${to} — "${subject}"`);
+    console.log(`[EmailService] Email sent to ${to} - "${subject}"`);
+    return { success: true };
   } catch (error) {
     // Never crash the main flow because of email
     console.error("[EmailService] Failed to send email:", error.message);
+    return { success: false, message: error.message };
   }
 };
 
@@ -132,7 +151,7 @@ export const sendWelcomeEmail = async ({ name, email, role }) => {
     </div>
   `;
 
-  await sendEmail({
+  return sendEmail({
     to: email,
     subject: "Welcome to SmartRent — Account Created Successfully",
     html: baseTemplate(content),
@@ -156,7 +175,7 @@ export const sendPasswordResetOtpEmail = async ({ name, email, otp }) => {
     </div>
   `;
 
-  await sendEmail({
+  return sendEmail({
     to: email,
     subject: "SmartRent Password Reset OTP",
     html: baseTemplate(content),
@@ -256,7 +275,7 @@ export const sendBookingStatusEmail = async ({
     }
   `;
 
-  await sendEmail({
+  return sendEmail({
     to: userEmail,
     subject: `Booking ${statusLabel} — ${carBrand} ${carModel} | SmartRent`,
     html: baseTemplate(content),
@@ -324,7 +343,7 @@ export const sendListingRequestStatusEmail = async ({
     }
   `;
 
-  await sendEmail({
+  return sendEmail({
     to: email,
     subject: `Car Listing ${statusLabel} — ${carBrand} ${carModel} | SmartRent`,
     html: baseTemplate(content),
@@ -411,7 +430,7 @@ export const sendNewBookingNotificationToOwner = async ({
     </div>
   `;
 
-  await sendEmail({
+  return sendEmail({
     to: ownerEmail,
     subject: `New Booking Request — ${carBrand} ${carModel} | SmartRent`,
     html: baseTemplate(content),
@@ -463,7 +482,7 @@ export const sendSupportTicketEmail = async ({
     </div>
   `;
 
-  await sendEmail({
+  return sendEmail({
     to: adminEmail,
     subject: `Customer Support Ticket ${ticketId} | SmartRent`,
     html: baseTemplate(content),

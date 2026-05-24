@@ -2,6 +2,11 @@ import { useEffect, useState, useCallback } from "react";
 import { toast } from "react-hot-toast";
 import { useAppContext } from "../../context/contextStore";
 import Title from "../../components/owner/Title";
+import {
+  isKeywordList,
+  isSafeText,
+  validationMessages,
+} from "../../utils/validators";
 
 const emptyForm = { question: "", answer: "", keywords: "" };
 
@@ -48,6 +53,21 @@ const AdminFaq = () => {
 
     if (!form.question.trim() || !form.answer.trim() || !form.keywords.trim()) {
       toast.error("All fields are required.");
+      return;
+    }
+
+    if (!isSafeText(form.question, 8, 180)) {
+      toast.error("Question must be between 8 and 180 characters.");
+      return;
+    }
+
+    if (!isSafeText(form.answer, 10, 800)) {
+      toast.error("Answer must be between 10 and 800 characters.");
+      return;
+    }
+
+    if (!isKeywordList(form.keywords)) {
+      toast.error(validationMessages.keywords);
       return;
     }
 

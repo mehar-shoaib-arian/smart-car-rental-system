@@ -2,6 +2,12 @@ import React, { useEffect, useState, useRef } from "react";
 import { toast } from "react-hot-toast";
 import { useAppContext } from "../context/contextStore";
 import { assets } from "../assets/assets";
+import {
+  isAlphabeticName,
+  isAlphanumericPassword,
+  isGmailAddress,
+  validationMessages,
+} from "../utils/validators";
 
 const Login = ({ setShowLogin, onSuccess, requiredRole = null }) => {
   const { axios } = useAppContext();
@@ -20,6 +26,7 @@ const Login = ({ setShowLogin, onSuccess, requiredRole = null }) => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
 
   const modalRef = useRef(null);
 
@@ -42,7 +49,29 @@ const Login = ({ setShowLogin, onSuccess, requiredRole = null }) => {
     setOtp("");
     setNewPassword("");
     setConfirmPassword("");
+    setResendSeconds(0);
   }, [role, state]);
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return undefined;
+
+    const timerId = window.setInterval(() => {
+      setResendSeconds((prev) => Math.max(0, prev - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, [resendSeconds]);
+
+  const sendPasswordResetOtp = async () => {
+    const res = await axios.post("/api/user/forgot-password", { email });
+    if (res.data.success) {
+      toast.success(res.data.message);
+      setOtpSent(true);
+      setResendSeconds(60);
+    } else {
+      toast.error(res.data.message);
+    }
+  };
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -69,14 +98,13 @@ const Login = ({ setShowLogin, onSuccess, requiredRole = null }) => {
       setSubmitting(true);
 
       if (forgotPasswordMode) {
+        if (!isGmailAddress(email)) {
+          toast.error(validationMessages.gmail);
+          return;
+        }
+
         if (!otpSent) {
-          const res = await axios.post("/api/user/forgot-password", { email });
-          if (res.data.success) {
-            toast.success(res.data.message);
-            setOtpSent(true);
-          } else {
-            toast.error(res.data.message);
-          }
+          await sendPasswordResetOtp();
           return;
         }
 
@@ -85,8 +113,8 @@ const Login = ({ setShowLogin, onSuccess, requiredRole = null }) => {
           return;
         }
 
-        if (newPassword.length < 6) {
-          toast.error("New password must be at least 6 characters");
+        if (!isAlphanumericPassword(newPassword)) {
+          toast.error(validationMessages.password);
           return;
         }
 
@@ -108,6 +136,7 @@ const Login = ({ setShowLogin, onSuccess, requiredRole = null }) => {
           setOtp("");
           setNewPassword("");
           setConfirmPassword("");
+          setResendSeconds(0);
           setPassword("");
           setState("login");
         } else {
@@ -117,6 +146,21 @@ const Login = ({ setShowLogin, onSuccess, requiredRole = null }) => {
       }
 
       if (state === "register") {
+        if (!isAlphabeticName(name)) {
+          toast.error(validationMessages.name);
+          return;
+        }
+
+        if (!isGmailAddress(email)) {
+          toast.error(validationMessages.gmail);
+          return;
+        }
+
+        if (!isAlphanumericPassword(password)) {
+          toast.error(validationMessages.password);
+          return;
+        }
+
         const res = await axios.post("/api/user/register", {
           name,
           email,
@@ -132,6 +176,16 @@ const Login = ({ setShowLogin, onSuccess, requiredRole = null }) => {
           toast.error(res.data.message);
         }
       } else {
+        if (!isGmailAddress(email)) {
+          toast.error(validationMessages.gmail);
+          return;
+        }
+
+        if (!password) {
+          toast.error("Password is required.");
+          return;
+        }
+
         // ================= LOGIN =================
         const res = await axios.post("/api/user/login", {
           email,
@@ -329,6 +383,7 @@ const Login = ({ setShowLogin, onSuccess, requiredRole = null }) => {
                 setOtp("");
                 setNewPassword("");
                 setConfirmPassword("");
+                setResendSeconds(0);
               }}
               className="text-blue-600 cursor-pointer"
             >
@@ -346,12 +401,43 @@ const Login = ({ setShowLogin, onSuccess, requiredRole = null }) => {
                 setOtp("");
                 setNewPassword("");
                 setConfirmPassword("");
+                setResendSeconds(0);
               }}
               className="text-blue-600 cursor-pointer"
             >
               Back to Login
             </span>
           </p>
+        )}
+
+        {forgotPasswordMode && otpSent && (
+          <div className="text-sm text-center">
+            {resendSeconds > 0 ? (
+              <span className="text-gray-500">
+                Resend OTP in {resendSeconds}s
+              </span>
+            ) : (
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={async () => {
+                  try {
+                    setSubmitting(true);
+                    await sendPasswordResetOtp();
+                  } catch (error) {
+                    toast.error(
+                      error.response?.data?.message || "Failed to resend OTP",
+                    );
+                  } finally {
+                    setSubmitting(false);
+                  }
+                }}
+                className="text-blue-600 cursor-pointer disabled:text-blue-400 disabled:cursor-not-allowed"
+              >
+                Resend OTP
+              </button>
+            )}
+          </div>
         )}
 
         {role === "user" && !forgotPasswordMode && (

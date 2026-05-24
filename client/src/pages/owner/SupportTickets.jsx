@@ -4,6 +4,7 @@ import { toast } from "react-hot-toast";
 import Title from "../../components/owner/Title";
 import { useAppContext } from "../../context/contextStore";
 import { assets } from "../../assets/assets";
+import { isSafeText } from "../../utils/validators";
 
 const SupportTickets = () => {
   const { axios, user: currentUser } = useAppContext();
@@ -76,6 +77,10 @@ const SupportTickets = () => {
     const message = String(replyDrafts[ticketId] || "").trim();
     if (!message) {
       toast.error("Reply message is required.");
+      return;
+    }
+    if (!isSafeText(message, 2, 1000)) {
+      toast.error("Reply must be between 2 and 1000 characters.");
       return;
     }
 

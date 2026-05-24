@@ -3,6 +3,12 @@ import { toast } from "react-hot-toast";
 import { useAppContext } from "../../context/contextStore";
 import Title from "../../components/owner/Title";
 import { assets } from "../../assets/assets";
+import {
+  isAlphabeticName,
+  isAlphanumericPassword,
+  isGmailAddress,
+  validationMessages,
+} from "../../utils/validators";
 
 const Profile = () => {
   const { user, setUser, axios } = useAppContext();
@@ -57,6 +63,14 @@ const Profile = () => {
       toast.error("Name and email are required.");
       return;
     }
+    if (!isAlphabeticName(name)) {
+      toast.error(validationMessages.name);
+      return;
+    }
+    if (!isGmailAddress(email)) {
+      toast.error(validationMessages.gmail);
+      return;
+    }
     setProfileLoading(true);
     try {
       const { data } = await axios.put(
@@ -84,8 +98,8 @@ const Profile = () => {
       toast.error("Please fill all password fields.");
       return;
     }
-    if (newPassword.length < 6) {
-      toast.error("New password must be at least 6 characters.");
+    if (!isAlphanumericPassword(newPassword)) {
+      toast.error(validationMessages.password);
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -457,9 +471,9 @@ const Profile = () => {
                 )}
               {newPassword &&
                 newPassword.length > 0 &&
-                newPassword.length < 6 && (
+                !isAlphanumericPassword(newPassword) && (
                   <p className="text-xs text-red-500">
-                    Password must be at least 6 characters.
+                    Password must contain letters and numbers only.
                   </p>
                 )}
 

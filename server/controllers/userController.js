@@ -6,6 +6,20 @@ import {
   sendPasswordResetOtpEmail,
   sendWelcomeEmail,
 } from "../configs/emailService.js";
+import {
+  isAlphabeticName,
+  isAlphanumericPassword,
+  isGmailAddress,
+} from "../utils/validators.js";
+
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const ACCOUNT_LOCK_MINUTES = 15;
+
+const getAccountLockMessage = (lockedUntil) => {
+  const remainingMs = new Date(lockedUntil).getTime() - Date.now();
+  const remainingMinutes = Math.max(1, Math.ceil(remainingMs / 60000));
+  return `Account locked due to too many wrong login attempts. Try again after ${remainingMinutes} minute${remainingMinutes === 1 ? "" : "s"}.`;
+};
 
 const buildRecommendationScore = (car, preferences) => {
   let score = 0;
@@ -79,7 +93,32 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    const existingUser = await User.findOne({ email });
+    const normalizedName = String(name).trim();
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    if (!isAlphabeticName(normalizedName)) {
+      return res.json({
+        success: false,
+        message: "Invalid name.",
+      });
+    }
+
+    if (!isGmailAddress(normalizedEmail)) {
+      return res.json({
+        success: false,
+        message: "Email must be a valid @gmail.com address.",
+      });
+    }
+
+    if (!isAlphanumericPassword(password)) {
+      return res.json({
+        success: false,
+        message:
+          "Password must be at least 6 characters and contain letters or numbers only.",
+      });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
 
     if (existingUser) {
       return res.json({
@@ -91,8 +130,8 @@ export const registerUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = await User.create({
-      name,
-      email,
+      name: normalizedName,
+      email: normalizedEmail,
       password: hashedPassword,
       role: "user",
     });
@@ -143,7 +182,16 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email });
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    if (!isGmailAddress(normalizedEmail)) {
+      return res.json({
+        success: false,
+        message: "Email must be a valid @gmail.com address.",
+      });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
       return res.json({
@@ -152,13 +200,82 @@ export const loginUser = async (req, res) => {
       });
     }
 
+    if (!user.password) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This account has no password configured. Please reset your password.",
+      });
+    }
+
+    if (
+      user.accountLockedUntil &&
+      new Date(user.accountLockedUntil).getTime() > Date.now()
+    ) {
+      return res.status(423).json({
+        success: false,
+        message: getAccountLockMessage(user.accountLockedUntil),
+      });
+    }
+
+    if (
+      user.accountLockedUntil &&
+      new Date(user.accountLockedUntil).getTime() <= Date.now()
+    ) {
+      user.failedLoginAttempts = 0;
+      user.accountLockedUntil = null;
+      await User.updateOne(
+        { _id: user._id },
+        { $set: { failedLoginAttempts: 0, accountLockedUntil: null } },
+      );
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
+      user.failedLoginAttempts = Number(user.failedLoginAttempts || 0) + 1;
+
+      if (user.failedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+        user.accountLockedUntil = new Date(
+          Date.now() + ACCOUNT_LOCK_MINUTES * 60 * 1000,
+        );
+        await User.updateOne(
+          { _id: user._id },
+          {
+            $set: {
+              failedLoginAttempts: user.failedLoginAttempts,
+              accountLockedUntil: user.accountLockedUntil,
+            },
+          },
+        );
+
+        return res.status(423).json({
+          success: false,
+          message: getAccountLockMessage(user.accountLockedUntil),
+        });
+      }
+
+      await User.updateOne(
+        { _id: user._id },
+        { $set: { failedLoginAttempts: user.failedLoginAttempts } },
+      );
+
+      const remainingAttempts =
+        MAX_FAILED_LOGIN_ATTEMPTS - user.failedLoginAttempts;
+
       return res.json({
         success: false,
-        message: "Wrong password",
+        message: `Wrong password. ${remainingAttempts} attempt${remainingAttempts === 1 ? "" : "s"} remaining before account lock.`,
       });
+    }
+
+    if (user.failedLoginAttempts || user.accountLockedUntil) {
+      user.failedLoginAttempts = 0;
+      user.accountLockedUntil = null;
+      await User.updateOne(
+        { _id: user._id },
+        { $set: { failedLoginAttempts: 0, accountLockedUntil: null } },
+      );
     }
 
     const token = generateToken(user);
@@ -174,10 +291,10 @@ export const loginUser = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Login error:", error.message);
+    console.error("Login error:", error);
     res.status(500).json({
       success: false,
-      message: "Server error",
+      message: error.message || "Server error",
     });
   }
 };
@@ -193,7 +310,16 @@ export const requestPasswordResetOtp = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    if (!isGmailAddress(normalizedEmail)) {
+      return res.json({
+        success: false,
+        message: "Email must be a valid @gmail.com address.",
+      });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
       return res.json({
@@ -208,13 +334,34 @@ export const requestPasswordResetOtp = async (req, res) => {
     await user.save();
 
     try {
-      await sendPasswordResetOtpEmail({
+      const emailResult = await sendPasswordResetOtpEmail({
         name: user.name,
         email: user.email,
         otp,
       });
+
+      if (!emailResult?.success) {
+        user.passwordResetOtp = "";
+        user.passwordResetOtpExpires = null;
+        await user.save();
+
+        return res.status(500).json({
+          success: false,
+          message:
+            emailResult?.message ||
+            "Password reset email could not be sent. Please check email configuration.",
+        });
+      }
     } catch (emailErr) {
       console.log("[Email] Password reset OTP error:", emailErr.message);
+      user.passwordResetOtp = "";
+      user.passwordResetOtpExpires = null;
+      await user.save();
+      return res.status(500).json({
+        success: false,
+        message:
+          "Password reset email could not be sent. Please check email configuration.",
+      });
     }
 
     res.json({
@@ -241,14 +388,24 @@ export const resetPasswordWithOtp = async (req, res) => {
       });
     }
 
-    if (String(newPassword).length < 6) {
+    if (!isAlphanumericPassword(newPassword)) {
       return res.json({
         success: false,
-        message: "New password must be at least 6 characters",
+        message:
+          "New password must be at least 6 characters and contain letters or numbers only.",
       });
     }
 
-    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    if (!isGmailAddress(normalizedEmail)) {
+      return res.json({
+        success: false,
+        message: "Email must be a valid @gmail.com address.",
+      });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
       return res.json({
@@ -286,6 +443,8 @@ export const resetPasswordWithOtp = async (req, res) => {
     user.password = await bcrypt.hash(newPassword, 10);
     user.passwordResetOtp = "";
     user.passwordResetOtpExpires = null;
+    user.failedLoginAttempts = 0;
+    user.accountLockedUntil = null;
     await user.save();
 
     res.json({

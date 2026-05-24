@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { toast } from "react-hot-toast";
 import { useAppContext } from "../context/contextStore";
+import { isGmailAddress, validationMessages } from "../utils/validators";
 
 const Newsletter = () => {
   const { axios } = useAppContext();
@@ -12,6 +13,10 @@ const Newsletter = () => {
 
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) return;
+    if (!isGmailAddress(normalizedEmail)) {
+      toast.error(validationMessages.gmail);
+      return;
+    }
 
     try {
       setLoading(true);

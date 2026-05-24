@@ -1,5 +1,6 @@
 import express from "express";
 import NewsletterSubscriber from "../models/NewsletterSubscriber.js";
+import { isGmailAddress } from "../utils/validators.js";
 
 const newsletterRouter = express.Router();
 
@@ -14,11 +15,10 @@ newsletterRouter.post("/subscribe", async (req, res) => {
       });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!isGmailAddress(email)) {
       return res.status(400).json({
         success: false,
-        message: "Please enter a valid email address.",
+        message: "Email must be a valid @gmail.com address.",
       });
     }
 

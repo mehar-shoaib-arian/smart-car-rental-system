@@ -3,6 +3,13 @@ import { toast } from "react-hot-toast";
 import Tittle from "../components/Tittle";
 import { useAppContext } from "../context/contextStore";
 import { assets } from "../assets/assets";
+import {
+  isAlphabeticCity,
+  isAlphabeticName,
+  isGmailAddress,
+  isVehicleText,
+  validationMessages,
+} from "../utils/validators";
 
 const initialState = {
   fullName: "",
@@ -90,6 +97,26 @@ const ListYourCar = ({ asModal = false, onClose = null }) => {
 
     if (!image) {
       toast.error("Please upload car image");
+      return;
+    }
+
+    if (!isAlphabeticName(form.fullName)) {
+      toast.error(validationMessages.name);
+      return;
+    }
+
+    if (!isGmailAddress(form.email)) {
+      toast.error(validationMessages.gmail);
+      return;
+    }
+
+    if (!isAlphabeticCity(form.location)) {
+      toast.error(validationMessages.city);
+      return;
+    }
+
+    if (!isVehicleText(form.brand) || !isVehicleText(form.model)) {
+      toast.error(validationMessages.vehicleText);
       return;
     }
 

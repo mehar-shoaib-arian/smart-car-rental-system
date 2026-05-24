@@ -5,6 +5,7 @@ import Booking from "../models/Booking.js";
 import SupportTicket from "../models/SupportTicket.js";
 import { protect, requireUser } from "../middleware/auth.js";
 import { sendSupportTicketEmail } from "../configs/emailService.js";
+import { isSafeText } from "../utils/validators.js";
 
 const router = express.Router();
 
@@ -64,6 +65,13 @@ router.post("/tickets/:ticketId/messages", protect, requireUser, async (req, res
         .json({ success: false, message: "Message is required." });
     }
 
+    if (!isSafeText(message, 2, MAX_SUPPORT_MESSAGE_LENGTH)) {
+      return res.status(400).json({
+        success: false,
+        message: "Message must be between 2 and 1000 characters.",
+      });
+    }
+
     const ticket = await SupportTicket.findOne({
       _id: ticketId,
       user: req.user._id,
@@ -111,6 +119,20 @@ router.post("/report-issue", protect, requireUser, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Subject and message are required.",
+      });
+    }
+
+    if (!isSafeText(cleanSubject, 3, 120)) {
+      return res.status(400).json({
+        success: false,
+        message: "Subject must be between 3 and 120 characters.",
+      });
+    }
+
+    if (!isSafeText(cleanMessage, 5, MAX_SUPPORT_MESSAGE_LENGTH)) {
+      return res.status(400).json({
+        success: false,
+        message: "Message must be between 5 and 1000 characters.",
       });
     }
 

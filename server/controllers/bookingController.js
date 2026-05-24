@@ -10,6 +10,10 @@ import {
   releaseCarBookingLock,
 } from "../utils/bookingLock.js";
 import { calculateSmartBookingPrice } from "../utils/bookingPricing.js";
+import {
+  isAlphabeticCity,
+  isValidBookingDateRange,
+} from "../utils/validators.js";
 
 const MAX_CANCELLATION_REASON_LENGTH = 280;
 
@@ -72,6 +76,20 @@ export const checkAvailabilityOfCar = async (req, res) => {
   try {
     const { location, pickupDate, returnDate } = req.body;
 
+    if (!isAlphabeticCity(location)) {
+      return res.status(400).json({
+        success: false,
+        message: "City must contain alphabetic characters only.",
+      });
+    }
+
+    if (!isValidBookingDateRange(pickupDate, returnDate)) {
+      return res.status(400).json({
+        success: false,
+        message: "Return date must be after a valid pickup date.",
+      });
+    }
+
     // fetch all available cars for the given location
     const cars = await Car.find({ location, isAvailable: true });
 
@@ -111,10 +129,10 @@ export const createBooking = async (req, res) => {
       });
     }
 
-    if (new Date(returnDate) <= new Date(pickupDate)) {
+    if (!isValidBookingDateRange(pickupDate, returnDate)) {
       return res.status(400).json({
         success: false,
-        message: "Return date must be after pickup date",
+        message: "Return date must be after a valid pickup date.",
       });
     }
 
