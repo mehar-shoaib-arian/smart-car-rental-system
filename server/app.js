@@ -24,11 +24,24 @@ app.use("/api/payment/webhook", express.raw({ type: "application/json" }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// CORS FIX
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://smart-car-rental-system-shoaib.vercel.app",
+];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
-  }),
+  })
 );
 
 app.get("/", (req, res) => {
